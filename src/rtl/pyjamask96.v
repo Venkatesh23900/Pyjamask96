@@ -1,7 +1,3 @@
-//==============================================================================
-//=== Pyjamask-96 Macros
-//==============================================================================
-
 `define NB_ROUNDS_96    14
 
 `define COL_M0  32'ha3861085
@@ -43,6 +39,9 @@ module pyjamask96(
     // Control signals
     reg load_key_and_state;
     reg load_key;
+    reg add_rnd_key;
+    reg sub_byte;
+    reg mix_row;
     reg [3:0] round_count;
     reg [4:0] byte_count;
 
@@ -61,12 +60,18 @@ module pyjamask96(
             IDLE: begin
                 if(load) begin
                     load_key_and_state = 1;
-                    load_key           = 0;           
+                    load_key           = 0;
+                    add_rnd_key        = 0;
+                    sub_byte           = 0;
+                    mix_row            = 0;        
                     next_state         = LOAD_STATES;
                 end
                 else begin
                     load_key_and_state = 0;
-                    load_key           = 0;                
+                    load_key           = 0;
+                    add_rnd_key        = 0;
+                    sub_byte           = 0;
+                    mix_row            = 0;                 
                     next_state         = IDLE;
                 end
             end
@@ -75,24 +80,45 @@ module pyjamask96(
                 if(start) begin
                     load_key_and_state = 0;
                     load_key           = 0;
+                    add_rnd_key        = 0;
+                    sub_byte           = 0;
+                    mix_row            = 0; 
                     next_state         = PYJAMASK_RND;
                 end
                 else begin
                     load_key_and_state = (byte_count <= 5'hb) ? 1 : 0;
-                    load_key           = (byte_count >= 5'hb & byte_count <= 5'h10) ? 1 : 0;                     
+                    load_key           = (byte_count >= 5'hb & byte_count <= 5'hf) ? 1 : 0;
+                    add_rnd_key        = 0;
+                    sub_byte           = 0;
+                    mix_row            = 0;                  
                     next_state         = LOAD_STATES;
                 end
             end
 
             PYJAMASK_RND: begin
+                load_key_and_state     = 0;
+                load_key               = 0;
+                add_rnd_key            = 1;
+                sub_byte               = 0;
+                mix_row                = 0;                
                 next_state             = ADD_RND_KEY;
             end
 
             ADD_RND_KEY: begin
+                load_key_and_state     = 0;
+                load_key               = 0;
+                add_rnd_key            = 0;
+                sub_byte               = 1;
+                mix_row                = 0;                 
                 next_state             = SUB_BYTES;
             end
 
             SUB_BYTES: begin
+                load_key_and_state     = 0;
+                load_key               = 0;
+                add_rnd_key            = 0;
+                sub_byte               = 0;
+                mix_row                = 1; 
                 next_state             = MIX_ROWS;
             end
 
@@ -124,18 +150,26 @@ module pyjamask96(
 
         else begin
             if(load_key_and_state) begin
-                state[8*(byte_count) +: 8] <= byte_in;
-                key_state[8*(byte_count) +: 8] <= byte_key_in;
+                state <= (state << 8) | byte_in;
+                key_state <= (key_state << 8) | byte_key_in;
                 byte_count <= byte_count + 1;
             end
 
             if(load_key) begin
-                key_state[8*(byte_count) +: 8] <= byte_key_in;
+                key_state <= (key_state << 8) | byte_key_in;
                 byte_count <= byte_count + 1;
             end
         end
     end
 
+    // Add Round Key
+    always@(posedge clk) begin
+        if(add_rnd_key) begin
+            state <= state ^ key_state[95:0];
+        end
+    end
 
-
+    // SubByte
+    
+        
 endmodule
