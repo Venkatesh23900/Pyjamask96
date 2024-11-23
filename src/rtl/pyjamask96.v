@@ -30,8 +30,8 @@ module pyjamask96(
         DONE =              4'd8;
 
     // Store state and keystate
-    reg [95:0] state;
-    reg [127:0] key_state;
+    reg [0:95] state;
+    reg [0:127] key_state;
 
     // State vectors
     reg [2:0] curr_state, next_state;
@@ -42,8 +42,10 @@ module pyjamask96(
     reg add_rnd_key;
     reg sub_byte;
     reg mix_row;
+
     reg [3:0] round_count;
     reg [4:0] byte_count;
+    reg [5:0] col_count; 
 
     // State transition
     always @(posedge clk or posedge reset_n) begin
@@ -114,12 +116,23 @@ module pyjamask96(
             end
 
             SUB_BYTES: begin
-                load_key_and_state     = 0;
-                load_key               = 0;
-                add_rnd_key            = 0;
-                sub_byte               = 0;
-                mix_row                = 1; 
-                next_state             = MIX_ROWS;
+                if(col_count <= 6'h1f) begin 
+                    load_key_and_state     = 0;
+                    load_key               = 0;
+                    add_rnd_key            = 0;
+                    sub_byte               = 1;
+                    mix_row                = 0; 
+                    next_state             = SUB_BYTES;
+                end
+
+                else begin
+                    load_key_and_state     = 0;
+                    load_key               = 0;
+                    add_rnd_key            = 0;
+                    sub_byte               = 0;
+                    mix_row                = 1; 
+                    next_state             = MIX_ROWS;      
+                end
             end
 
             MIX_ROWS: begin
@@ -165,11 +178,67 @@ module pyjamask96(
     // Add Round Key
     always@(posedge clk) begin
         if(add_rnd_key) begin
-            state <= state ^ key_state[95:0];
+            state <= state ^ key_state[0:95];
         end
     end
 
     // SubByte
-    
-        
+    always@(posedge clk or negedge reset_n) begin
+        if(!reset_n) begin
+            col_count <= 6'b0;
+        end
+
+        else if (sub_byte) begin
+            case({state[col_count], state[col_count+32], state[col_count+64]})
+                3'h0: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h1;
+                    col_count <= col_count + 1;
+                end
+
+                3'h1: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h3;
+                    col_count <= col_count + 1;
+                end
+
+                3'h2: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h6;
+                    col_count <= col_count + 1;
+                end
+
+                3'h3: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h5;
+                    col_count <= col_count + 1;
+                end
+
+                3'h4: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h2;
+                    col_count <= col_count + 1;
+                end
+
+                3'h5: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h4;
+                    col_count <= col_count + 1;
+                end
+
+                3'h6: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h7;
+                    col_count <= col_count + 1;
+                end
+
+                3'h7: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h0;
+                    col_count <= col_count + 1;
+                end
+
+                default: begin
+                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h1;
+                    col_count <= col_count + 1;
+                end                   
+
+            endcase
+        end
+    end
+
+
+
 endmodule

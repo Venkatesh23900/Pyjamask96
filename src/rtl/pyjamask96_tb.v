@@ -35,13 +35,21 @@ module tb_pyjamask96;
     reg [95:0] test_exp;
     integer i;
 
+    reg [95:0] temp_state;
+    reg [127:0] temp_key;
+
     // Test
     initial begin
 
         //TEST VECTOR INPUT 0
-        test_key = 128'h00112233445566778899aabbccddeeff;
-        test_state = 96'h50796a616d61736b39363a29;
-        test_exp = 96'hca9c6e1abbde4edc27073da6;
+        /* Pyjamask -96 */
+        // Key:        00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff
+        // Plaintext:  50 79 6a 61 6d 61 73 6b 39 36 3a 29
+        // Ciphertext: ca 9c 6e 1a bb de 4e dc 27 07 3d a6
+
+        test_key =   128'h00_11_22_33_44_55_66_77_88_99_aa_bb_cc_dd_ee_ff;
+        test_state =  96'h50_79_6a_61_6d_61_73_6b_39_36_3a_29;
+        test_exp =    96'hca_9c_6e_1a_bb_de_4e_dc_27_07_3d_a6;
 
         // Initialize inputs
         clk = 0;
@@ -50,6 +58,8 @@ module tb_pyjamask96;
         start = 0;
         byte_in = 0;
         byte_key_in = 0;
+        temp_state = 0;
+        temp_key = 0;
 
         // Reset
         #(CLOCK_PERIOD*5);
@@ -61,17 +71,20 @@ module tb_pyjamask96;
         #(CLOCK_PERIOD*3);
 
 		//main test loop
-        for(i=0; i<=15; i=i+1) begin
+        for(i=0; i<16; i=i+1) begin
             
             load = 1;
 
             if(i <= 11) begin
-            byte_key_in = test_key[8*i +: 8];
-            byte_in = test_state[8*i +: 8];
+                temp_key = test_key << 8*i;
+                temp_state = test_state << 8*i;
+                byte_in = temp_state[95:88];
+                byte_key_in = temp_key[127:120];
             end
 
             else begin
-                byte_key_in = test_key[8*i +: 8];
+                temp_key = test_key << 8*i;
+                byte_key_in = temp_key[127:120];
             end
 
             #(CLOCK_PERIOD);
