@@ -66,7 +66,7 @@ module pyjamask96(
     reg [4:0] byte_count;
 
     // State transition
-    always @(posedge clk or posedge reset_n) begin
+    always @(posedge clk or negedge reset_n) begin
         if(!reset_n) curr_state <= IDLE;
         else curr_state <= next_state;       
     end
@@ -273,57 +273,74 @@ module pyjamask96(
     //=== Data path logic
     //==============================================================================
 
-    // Load state and key
+    // state reg.
     always@(posedge clk or negedge reset_n) begin
         if(!reset_n) begin
             state <= 96'b0;
-            key_state <= 128'b0;
-            byte_count <= 5'b0;
-            valid <= 0;
+            round_count <= 4'b0;
         end
         
-        // Reset byte counter
-        else if(rst) begin
+        // Reset pyjamask rounds
+        if(rst) begin
+            round_count <= 4'b0;
+        end
+
+        // Add Round Key
+        if(add_rnd_key) begin
+            state <= state ^ key_state[0:95];
+        end
+
+        // Load state
+        else if(load_key_and_state) begin
+            state <= (state << 8) | byte_in;
+        end
+
+        // SubByte
+        else if(sub_byte) begin
+            state <= sub_bytes_96(state);
+        end
+
+        // Mixrows
+        else if(mix_row) begin
+            state[0:31] <= mat_mult(`COL_M0, state[0:31]);
+            state[32:63] <= mat_mult(`COL_M1, state[32:63]);
+            state[64:95] <= mat_mult(`COL_M2, state[64:95]);
+
+            round_count <= round_count + 1;
+        end
+    end
+
+
+    // pyjamask round ctrl.
+    always@(posedge clk or negedge reset_n) begin
+        if(!reset_n) begin
             byte_count <= 5'b0;
             valid <= 0;
         end
 
-        // Load state and key
-        else if(load_key_and_state) begin
-            state <= (state << 8) | byte_in;
-            key_state <= (key_state << 8) | byte_key_in;
-            byte_count <= byte_count + 1;
+        // Reset rounds
+        if(rst) begin
+            byte_count <= 5'b0;
+            valid <= 0;
         end
 
         else if(load_key) begin
-            key_state <= (key_state << 8) | byte_key_in;
             byte_count <= byte_count + 1;
         end
 
-        // Output
+        else if(load_key_and_state) begin
+            byte_count <= byte_count + 1;
+        end
+
+        // Pyjamask output
         else if(out) begin
             valid <= 1;
             byte_out <= state >> (8*byte_count);
             byte_count <= byte_count + 1;
         end
-
     end
 
-    // Add Round Key
-    always@(posedge clk) begin
-        if(add_rnd_key) begin
-            state <= state ^ key_state[0:95];
-        end
-    end
-
-    // SubByte
-    always@(posedge clk) begin
-        if(sub_byte) begin
-            state <= sub_bytes_96(state);
-        end
-    end
           
-
     // SubByte
     function [0:95] sub_bytes_96 (input [0:95] state);
         reg [0:31] s0, s1, s2;
@@ -352,25 +369,6 @@ module pyjamask96(
         end
     endfunction
 
-    // MixRows
-    always@(posedge clk or negedge reset_n) begin
-        if(!reset_n) begin
-            round_count <= 4'h0;
-        end
-
-        else if(rst) begin
-            // Reset round counter
-            round_count <= 4'h0;
-        end
-
-        else if(mix_row) begin
-            state[0:31] <= mat_mult(`COL_M0, state[0:31]);
-            state[32:63] <= mat_mult(`COL_M1, state[32:63]);
-            state[64:95] <= mat_mult(`COL_M2, state[64:95]);
-
-            round_count <= round_count + 1;
-        end
-    end
 
     // Matrix-Multiplcation
     function [0:31] mat_mult (input [0:31] mat_col, input [0:31] vec);
@@ -395,6 +393,37 @@ module pyjamask96(
     //=== Key schedule
     //==============================================================================
 
+    // key state reg.
+    always@(posedge clk or negedge reset_n) begin
+        if(!reset_n) begin
+            key_state <= 128'b0;
+        end
+
+        // Load key
+        else if(load_key_and_state) begin
+            key_state <= (key_state << 8) | byte_key_in;
+        end
+
+        else if(load_key) begin
+            key_state <= (key_state << 8) | byte_key_in;
+        end
+
+        // Key mix cols.
+        else if(ks_mix_col) begin
+            key_state <= ks_mix_columns(key_state);
+        end
+
+        // Key mix and rotate rows
+        else if(ks_mix_and_rot) begin
+            key_state <= ks_mix_and_rotate_rows(key_state);
+        end
+
+        // Key add const.
+        else if(ks_add_const) begin
+            key_state <= ks_add_constant(key_state, round_count);
+        end
+    end
+
     // MixColumns
     function [0:127] ks_mix_columns (input [0:127] key_state);
         reg [0:127] temp;
@@ -415,13 +444,6 @@ module pyjamask96(
             ks_mix_columns = {k0, k1, k2, k3};
         end
     endfunction
-
-    // MixColumns
-    always@(posedge clk) begin
-        if(ks_mix_col) begin
-            key_state <= ks_mix_columns(key_state);
-        end
-    end
 
     // MixAndRotateRows
     function [0:127] ks_mix_and_rotate_rows(input [0:127] key_state);
@@ -444,13 +466,6 @@ module pyjamask96(
         end
     endfunction
 
-    // MixAndRotateRows
-    always@(posedge clk) begin
-    if(ks_mix_and_rot) begin
-        key_state <= ks_mix_and_rotate_rows(key_state);
-    end
-    end
-
     // AddConstant
     function [0:127] ks_add_constant( input [0:127] key_state, input[3:0] ctr);
         reg [0:31] k0, k1, k2, k3;
@@ -469,12 +484,4 @@ module pyjamask96(
             ks_add_constant = {k0, k1, k2, k3};
         end
     endfunction
-
-    // AddConstant
-    always@(posedge clk) begin
-    if(ks_add_const) begin
-        key_state <= ks_add_constant(key_state, round_count);
-    end
-    end
-
 endmodule
