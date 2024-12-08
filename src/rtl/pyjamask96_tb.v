@@ -38,10 +38,15 @@ module tb_pyjamask96;
     reg [95:0] temp_state;
     reg [127:0] temp_key;
 
+    // Actual output
+    reg [95:0] out_fifo;
+	reg [3:0]   cnt_out;
+    integer j = 0;
+
     // Test
     initial begin
 
-        //TEST VECTOR INPUT 0
+        //TEST VECTOR INPUT
         /* Pyjamask -96 */
         // Key:        00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff
         // Plaintext:  50 79 6a 61 6d 61 73 6b 39 36 3a 29
@@ -70,7 +75,7 @@ module tb_pyjamask96;
 
         #(CLOCK_PERIOD*3);
 
-		//main test loop
+		// Main test loop
         for(i=0; i<16; i=i+1) begin
             
             load = 1;
@@ -97,15 +102,44 @@ module tb_pyjamask96;
 		#(CLOCK_PERIOD*2);
 		start=0;
 
+        #(CLOCK_PERIOD*69); // Aha!, the funny number
+
+        // Compare out_fifo with the expected ciphertext
+        if (out_fifo == test_exp)
+            $display("TEST VECTOR PASSED: Ciphertext matches expected output.");
+        else begin
+            $display("TEST VECTOR FAILED: Ciphertext does not match expected output.");
+            $display("Expected: %h, Got: %h", test_exp, out_fifo);
+        end
 
         $stop;
     end
 
-    //generate clock
+    // Generate clock
 	always #(CLOCK_PERIOD/2) clk = ~clk;
+
+    // Check if output matches the expected one
+    always @ (posedge clk or posedge reset_n)
+	begin
+        if (!reset_n)
+        begin
+            cnt_out <= 0;
+            out_fifo <= 0;
+        end
+
+		else if (valid)
+		begin
+			cnt_out <= cnt_out + 1;
+			out_fifo[8*j +: 8] <= byte_out;
+            j = j + 1;
+		end
+
+		else if (cnt_out == 12)
+			cnt_out <= 0;
+	end
 
     initial begin
       $dumpfile("dump.vcd");
-      $dumpvars(0, dut);
+      $dumpvars(0, tb_pyjamask96);
     end
 endmodule

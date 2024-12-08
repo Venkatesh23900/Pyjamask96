@@ -1,9 +1,20 @@
+// Pyjamask-96 macros
+
 `define NB_ROUNDS_96    14
 
-`define COL_M0  32'ha3861085
-`define COL_M1  32'h63417021
-`define COL_M2  32'h692cf280
-`define COL_MK  32'hb881b9ca
+`define COL_M0          32'ha3861085
+`define COL_M1          32'h63417021
+`define COL_M2          32'h692cf280
+`define COL_MK          32'hb881b9ca
+
+`define KS_ROT_GAP1      8
+`define KS_ROT_GAP2     15
+`define KS_ROT_GAP3     18
+
+`define KS_CONSTANT_0   32'h00000080
+`define KS_CONSTANT_1   32'h00006a00
+`define KS_CONSTANT_2   32'h003f0000
+`define KS_CONSTANT_3   32'h24000000
 
 
 module pyjamask96(
@@ -39,13 +50,20 @@ module pyjamask96(
     // Control signals
     reg load_key_and_state;
     reg load_key;
+
     reg add_rnd_key;
     reg sub_byte;
     reg mix_row;
 
+    reg ks_mix_col;
+    reg ks_mix_and_rot;
+    reg ks_add_const;
+
+    reg rst; // Reset counters
+    reg out; // Output is ready
+
     reg [3:0] round_count;
     reg [4:0] byte_count;
-    reg [5:0] col_count; 
 
     // State transition
     always @(posedge clk or posedge reset_n) begin
@@ -65,7 +83,12 @@ module pyjamask96(
                     load_key           = 0;
                     add_rnd_key        = 0;
                     sub_byte           = 0;
-                    mix_row            = 0;        
+                    mix_row            = 0;
+                    ks_mix_col         = 0;
+                    ks_mix_and_rot     = 0;
+                    ks_add_const       = 0;
+                    rst                = 0;
+                    out                = 0;  
                     next_state         = LOAD_STATES;
                 end
                 else begin
@@ -73,7 +96,12 @@ module pyjamask96(
                     load_key           = 0;
                     add_rnd_key        = 0;
                     sub_byte           = 0;
-                    mix_row            = 0;                 
+                    mix_row            = 0;
+                    ks_mix_col         = 0;
+                    ks_mix_and_rot     = 0;
+                    ks_add_const       = 0;
+                    rst                = 0;
+                    out                = 0;                
                     next_state         = IDLE;
                 end
             end
@@ -84,7 +112,12 @@ module pyjamask96(
                     load_key           = 0;
                     add_rnd_key        = 0;
                     sub_byte           = 0;
-                    mix_row            = 0; 
+                    mix_row            = 0;
+                    ks_mix_col         = 0;
+                    ks_mix_and_rot     = 0;
+                    ks_add_const       = 0;
+                    rst                = 0;
+                    out                = 0; 
                     next_state         = PYJAMASK_RND;
                 end
                 else begin
@@ -92,18 +125,44 @@ module pyjamask96(
                     load_key           = (byte_count >= 5'hb & byte_count <= 5'hf) ? 1 : 0;
                     add_rnd_key        = 0;
                     sub_byte           = 0;
-                    mix_row            = 0;                  
+                    mix_row            = 0;
+                    ks_mix_col         = 0;
+                    ks_mix_and_rot     = 0;
+                    ks_add_const       = 0;
+                    rst                = 0;
+                    out                = 0;                   
                     next_state         = LOAD_STATES;
                 end
             end
 
             PYJAMASK_RND: begin
-                load_key_and_state     = 0;
-                load_key               = 0;
-                add_rnd_key            = 1;
-                sub_byte               = 0;
-                mix_row                = 0;                
-                next_state             = ADD_RND_KEY;
+                if(round_count == `NB_ROUNDS_96) begin
+                    load_key_and_state     = 0;
+                    load_key               = 0;
+                    add_rnd_key            = 1;
+                    sub_byte               = 0;
+                    mix_row                = 0;
+                    ks_mix_col             = 0;
+                    ks_mix_and_rot         = 0;
+                    ks_add_const           = 0;
+                    rst                    = 1;
+                    out                    = 0;               
+                    next_state             = FINAL_RND;
+                end
+
+                else begin
+                    load_key_and_state     = 0;
+                    load_key               = 0;
+                    add_rnd_key            = 1;
+                    sub_byte               = 0;
+                    mix_row                = 0;
+                    ks_mix_col             = 1;
+                    ks_mix_and_rot         = 0;
+                    ks_add_const           = 0;
+                    rst                    = 0;
+                    out                    = 0;               
+                    next_state             = ADD_RND_KEY;
+                end
             end
 
             ADD_RND_KEY: begin
@@ -111,18 +170,70 @@ module pyjamask96(
                 load_key               = 0;
                 add_rnd_key            = 0;
                 sub_byte               = 1;
-                mix_row                = 0;                 
+                mix_row                = 0;
+                ks_mix_col             = 0;
+                ks_mix_and_rot         = 1;
+                ks_add_const           = 0;
+                rst                    = 0;
+                out                    = 0;                 
                 next_state             = SUB_BYTES;
             end
 
             SUB_BYTES: begin
-                if(col_count <= 6'h1f) begin 
+                load_key_and_state     = 0;
+                load_key               = 0;
+                add_rnd_key            = 0;
+                sub_byte               = 0;
+                mix_row                = 1;
+                ks_mix_col             = 0;
+                ks_mix_and_rot         = 0;
+                ks_add_const           = 1;
+                rst                    = 0;
+                out                    = 0;   
+                next_state             = MIX_ROWS;
+            end
+
+            MIX_ROWS: begin
+                load_key_and_state     = 0;
+                load_key               = 0;
+                add_rnd_key            = 0;
+                sub_byte               = 0;
+                mix_row                = 0;
+                ks_mix_col             = 0;
+                ks_mix_and_rot         = 0;
+                ks_add_const           = 0;
+                rst                    = 0;
+                out                    = 0;                 
+                next_state             = PYJAMASK_RND;
+            end
+
+            FINAL_RND: begin
+                load_key_and_state     = 0;
+                load_key               = 0;
+                add_rnd_key            = 0;
+                sub_byte               = 0;
+                mix_row                = 0;
+                ks_mix_col             = 0;
+                ks_mix_and_rot         = 0;
+                ks_add_const           = 0;
+                rst                    = 0;
+                out                    = 1;   
+                next_state             = OUT;
+            end
+
+            OUT: begin
+                if(byte_count == 4'd12) begin
                     load_key_and_state     = 0;
                     load_key               = 0;
                     add_rnd_key            = 0;
-                    sub_byte               = 1;
-                    mix_row                = 0; 
-                    next_state             = SUB_BYTES;
+                    sub_byte               = 0;
+                    mix_row                = 0;
+                    ks_mix_col             = 0;
+                    ks_mix_and_rot         = 0;
+                    ks_add_const           = 0;
+                    rst                    = 1;
+                    out                    = 0; 
+                    next_state             = DONE;
                 end
 
                 else begin
@@ -130,20 +241,29 @@ module pyjamask96(
                     load_key               = 0;
                     add_rnd_key            = 0;
                     sub_byte               = 0;
-                    mix_row                = 1; 
-                    next_state             = MIX_ROWS;      
+                    mix_row                = 0;
+                    ks_mix_col             = 0;
+                    ks_mix_and_rot         = 0;
+                    ks_add_const           = 0;
+                    rst                    = 0;
+                    out                    = 1;     
+                    next_state             = OUT;
                 end
             end
 
-            MIX_ROWS: begin
-                if(round_count == `NB_ROUNDS_96-1) next_state = FINAL_RND;
-                else next_state = PYJAMASK_RND;
+            DONE: begin
+                load_key_and_state     = 0;
+                load_key               = 0;
+                add_rnd_key            = 0;
+                sub_byte               = 0;
+                mix_row                = 0;
+                ks_mix_col             = 0;
+                ks_mix_and_rot         = 0;
+                ks_add_const           = 0;
+                rst                    = 0;
+                out                    = 0; 
+                next_state             = IDLE;
             end
-
-            FINAL_RND: begin
-                next_state             = OUT;
-            end
-
 
         endcase
     end
@@ -152,27 +272,41 @@ module pyjamask96(
     //==============================================================================
     //=== Data path logic
     //==============================================================================
-    
+
     // Load state and key
     always@(posedge clk or negedge reset_n) begin
         if(!reset_n) begin
             state <= 96'b0;
             key_state <= 128'b0;
             byte_count <= 5'b0;
+            valid <= 0;
+        end
+        
+        // Reset byte counter
+        else if(rst) begin
+            byte_count <= 5'b0;
+            valid <= 0;
         end
 
-        else begin
-            if(load_key_and_state) begin
-                state <= (state << 8) | byte_in;
-                key_state <= (key_state << 8) | byte_key_in;
-                byte_count <= byte_count + 1;
-            end
-
-            if(load_key) begin
-                key_state <= (key_state << 8) | byte_key_in;
-                byte_count <= byte_count + 1;
-            end
+        // Load state and key
+        else if(load_key_and_state) begin
+            state <= (state << 8) | byte_in;
+            key_state <= (key_state << 8) | byte_key_in;
+            byte_count <= byte_count + 1;
         end
+
+        else if(load_key) begin
+            key_state <= (key_state << 8) | byte_key_in;
+            byte_count <= byte_count + 1;
+        end
+
+        // Output
+        else if(out) begin
+            valid <= 1;
+            byte_out <= state >> (8*byte_count);
+            byte_count <= byte_count + 1;
+        end
+
     end
 
     // Add Round Key
@@ -183,62 +317,164 @@ module pyjamask96(
     end
 
     // SubByte
+    always@(posedge clk) begin
+        if(sub_byte) begin
+            state <= sub_bytes_96(state);
+        end
+    end
+          
+
+    // SubByte
+    function [0:95] sub_bytes_96 (input [0:95] state);
+        reg [0:31] s0, s1, s2;
+
+        begin
+            // Split the state in rows
+            s0 = state[0:31];
+            s1 = state[32:63];
+            s2 = state[64:95];
+
+            s0 = s0 ^ s1;
+            s1 = s1 ^ s2;
+            s2 = s2 ^ (s0 & s1);
+            s0 = s0 ^ (s1 & s2);
+            s1 = s1 ^ (s0 & s2);
+            s2 = s2 ^ s0;
+            s0 = s0 ^ s1;
+            s2 = ~s2;
+
+            // Swap s0 <-> s1
+            s0 = s0 ^ s1;
+            s1 = s1 ^ s0;
+            s0 = s0 ^ s1;
+
+            sub_bytes_96 = {s0, s1, s2};
+        end
+    endfunction
+
+    // MixRows
     always@(posedge clk or negedge reset_n) begin
         if(!reset_n) begin
-            col_count <= 6'b0;
+            round_count <= 4'h0;
         end
 
-        else if (sub_byte) begin
-            case({state[col_count], state[col_count+32], state[col_count+64]})
-                3'h0: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h1;
-                    col_count <= col_count + 1;
-                end
+        else if(rst) begin
+            // Reset round counter
+            round_count <= 4'h0;
+        end
 
-                3'h1: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h3;
-                    col_count <= col_count + 1;
-                end
+        else if(mix_row) begin
+            state[0:31] <= mat_mult(`COL_M0, state[0:31]);
+            state[32:63] <= mat_mult(`COL_M1, state[32:63]);
+            state[64:95] <= mat_mult(`COL_M2, state[64:95]);
 
-                3'h2: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h6;
-                    col_count <= col_count + 1;
-                end
-
-                3'h3: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h5;
-                    col_count <= col_count + 1;
-                end
-
-                3'h4: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h2;
-                    col_count <= col_count + 1;
-                end
-
-                3'h5: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h4;
-                    col_count <= col_count + 1;
-                end
-
-                3'h6: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h7;
-                    col_count <= col_count + 1;
-                end
-
-                3'h7: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h0;
-                    col_count <= col_count + 1;
-                end
-
-                default: begin
-                    {state[col_count], state[col_count+32], state[col_count+64]} <= 3'h1;
-                    col_count <= col_count + 1;
-                end                   
-
-            endcase
+            round_count <= round_count + 1;
         end
     end
 
+    // Matrix-Multiplcation
+    function [0:31] mat_mult (input [0:31] mat_col, input [0:31] vec);
+        integer i;
+        reg [0:31] mask, res;
+        begin
+            mask = 32'b0;
+            res = 32'b0;
 
+            for(i=31; i>=0; i=i-1) begin
+                mask = -((vec >> i) & 1);
+                res = res ^ (mask & mat_col);
+                mat_col = {mat_col[31], mat_col[0:30]};
+            end
+
+            mat_mult = res;
+        end
+    endfunction
+
+
+    //==============================================================================
+    //=== Key schedule
+    //==============================================================================
+
+    // MixColumns
+    function [0:127] ks_mix_columns (input [0:127] key_state);
+        reg [0:127] temp;
+        reg [0:31] k0, k1, k2, k3;
+        begin
+            k0 = key_state[0:31];
+            k1 = key_state[32:63];
+            k2 = key_state[64:95];
+            k3 = key_state[96:127];
+
+            temp = k0 ^ k1 ^ k2 ^ k3;
+
+            k0 = k0 ^ temp;
+            k1 = k1 ^ temp;
+            k2 = k2 ^ temp;
+            k3 = k3 ^ temp;
+
+            ks_mix_columns = {k0, k1, k2, k3};
+        end
+    endfunction
+
+    // MixColumns
+    always@(posedge clk) begin
+        if(ks_mix_col) begin
+            key_state <= ks_mix_columns(key_state);
+        end
+    end
+
+    // MixAndRotateRows
+    function [0:127] ks_mix_and_rotate_rows(input [0:127] key_state);
+        reg [0:31] k0, k1, k2, k3;
+        begin
+
+            k0 = key_state[0:31];
+            k1 = key_state[32:63];
+            k2 = key_state[64:95];
+            k3 = key_state[96:127];
+
+            k0 = mat_mult(`COL_MK, k0);
+
+            // Left rotate
+            k1 = (k1 >> `KS_ROT_GAP1) | (k1 << (32 - `KS_ROT_GAP1));
+            k2 = (k2 >> `KS_ROT_GAP2) | (k2 << (32 - `KS_ROT_GAP2));
+            k3 = (k3 >> `KS_ROT_GAP3) | (k3 << (32 - `KS_ROT_GAP3));
+
+            ks_mix_and_rotate_rows = {k0 ,k1, k2, k3};
+        end
+    endfunction
+
+    // MixAndRotateRows
+    always@(posedge clk) begin
+    if(ks_mix_and_rot) begin
+        key_state <= ks_mix_and_rotate_rows(key_state);
+    end
+    end
+
+    // AddConstant
+    function [0:127] ks_add_constant( input [0:127] key_state, input[3:0] ctr);
+        reg [0:31] k0, k1, k2, k3;
+        begin
+
+            k0 = key_state[0:31];
+            k1 = key_state[32:63];
+            k2 = key_state[64:95];
+            k3 = key_state[96:127];
+
+            k0 = k0 ^ `KS_CONSTANT_0 ^ ctr;
+            k1 = k1 ^ `KS_CONSTANT_1;
+            k2 = k2 ^ `KS_CONSTANT_2;
+            k3 = k3 ^ `KS_CONSTANT_3;
+
+            ks_add_constant = {k0, k1, k2, k3};
+        end
+    endfunction
+
+    // AddConstant
+    always@(posedge clk) begin
+    if(ks_add_const) begin
+        key_state <= ks_add_constant(key_state, round_count);
+    end
+    end
 
 endmodule
