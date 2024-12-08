@@ -374,15 +374,16 @@ module pyjamask96(
     // Matrix-Multiplcation
     function [0:31] mat_mult (input [0:31] mat_col, input [0:31] vec);
         integer i;
-        reg [0:31] mask, res;
+        reg [0:31] mask, res, tmp_mat_col;
         begin
             mask = 32'b0;
             res = 32'b0;
+            tmp_mat_col = mat_col;
 
             for(i=31; i>=0; i=i-1) begin
                 mask = -((vec >> i) & 1);
-                res = res ^ (mask & mat_col);
-                mat_col = {mat_col[31], mat_col[0:30]};
+                res = res ^ (mask & tmp_mat_col);
+                tmp_mat_col = {tmp_mat_col[31], tmp_mat_col[0:30]};
             end
 
             mat_mult = res;
