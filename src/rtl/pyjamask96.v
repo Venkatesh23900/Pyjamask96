@@ -1,4 +1,5 @@
 // Pyjamask-96 macros
+`timescale 1ns/1ps
 
 `define NB_ROUNDS_96    14
 
@@ -274,7 +275,7 @@ module pyjamask96(
     //==============================================================================
 
     // state reg.
-    always@(posedge clk or negedge reset_n) begin
+    always@(posedge clk) begin
         if(!reset_n) begin
             state <= 96'b0;
             round_count <= 4'b0;
