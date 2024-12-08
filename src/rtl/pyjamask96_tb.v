@@ -40,7 +40,7 @@ module tb_pyjamask96;
 
     // Actual output
     reg [95:0] out_fifo;
-	reg [3:0]   cnt_out;
+    reg [3:0]   cnt_out;
     integer j = 0;
 
     // Test
@@ -75,7 +75,7 @@ module tb_pyjamask96;
 
         #(CLOCK_PERIOD*3);
 
-		// Main test loop
+        // Main test loop
         for(i=0; i<16; i=i+1) begin
             
             load = 1;
@@ -96,11 +96,11 @@ module tb_pyjamask96;
         end
 
         load = 0;
-		#(CLOCK_PERIOD);
+        #(CLOCK_PERIOD);
 
-		start=1;
-		#(CLOCK_PERIOD*2);
-		start=0;
+        start=1;
+        #(CLOCK_PERIOD*2);
+        start=0;
 
         #(CLOCK_PERIOD*69); // Aha!, the funny number
 
@@ -116,27 +116,27 @@ module tb_pyjamask96;
     end
 
     // Generate clock
-	always #(CLOCK_PERIOD/2) clk = ~clk;
+    always #(CLOCK_PERIOD/2) clk = ~clk;
 
     // Check if output matches the expected one
     always @ (posedge clk or posedge reset_n)
-	begin
+    begin
         if (!reset_n)
         begin
             cnt_out <= 0;
             out_fifo <= 0;
         end
 
-		else if (valid)
-		begin
-			cnt_out <= cnt_out + 1;
-			out_fifo[8*j +: 8] <= byte_out;
+        else if (valid)
+        begin
+            cnt_out <= cnt_out + 1;
+            out_fifo[8*j +: 8] <= byte_out;
             j = j + 1;
-		end
+        end
 
-		else if (cnt_out == 12)
-			cnt_out <= 0;
-	end
+        else if (cnt_out == 12)
+            cnt_out <= 0;
+    end
 
     initial begin
       $dumpfile("dump.vcd");
