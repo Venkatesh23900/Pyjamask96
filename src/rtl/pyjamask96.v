@@ -313,7 +313,7 @@ module pyjamask96(
 
 
     // pyjamask round ctrl.
-    always@(posedge clk or negedge reset_n) begin
+    always@(posedge clk) begin
         if(!reset_n) begin
             byte_count <= 5'b0;
             valid <= 0;
@@ -396,7 +396,7 @@ module pyjamask96(
     //==============================================================================
 
     // key state reg.
-    always@(posedge clk or negedge reset_n) begin
+    always@(posedge clk) begin
         if(!reset_n) begin
             key_state <= 128'b0;
         end

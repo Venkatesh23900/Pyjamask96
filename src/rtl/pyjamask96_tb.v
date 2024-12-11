@@ -3,7 +3,7 @@
 
 module tb_pyjamask96;
 
-    parameter CLOCK_PERIOD = 10;
+    parameter CLOCK_PERIOD = 8;
 
     // Inputs
     reg clk;
